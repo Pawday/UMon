@@ -2,6 +2,7 @@
 #include <cassert>
 
 #include "ProgramArgument.hh"
+#include "UART.hh"
 
 template<typename T>
 ProgramArgument<T>::ProgramArgument(char oneCharAlias, std::string fullName, std::string description):
@@ -10,35 +11,60 @@ m_fullName(std::move(fullName)),
 m_description(std::move(description)) {}
 
 template ProgramArgument<bool>::ProgramArgument(char oneCharAlias, std::string fullName, std::string description);
-template ProgramArgument<uint16_t>::ProgramArgument(char oneCharAlias, std::string fullName, std::string description);
-template ProgramArgument<uint32_t>::ProgramArgument(char oneCharAlias, std::string fullName, std::string description);
+template ProgramArgument<UART::BaudRate>::ProgramArgument(char oneCharAlias, std::string fullName, std::string description);
+template ProgramArgument<UART::COMPort>::ProgramArgument(char oneCharAlias, std::string fullName, std::string description);
+template ProgramArgument<UART::ParityMode>::ProgramArgument(char oneCharAlias, std::string fullName, std::string description);
+template ProgramArgument<UART::StopBits>::ProgramArgument(char oneCharAlias, std::string fullName, std::string description);
+
+template<typename T>
+ProgramArgument<T>::ProgramArgument(std::string fullName, std::string description):
+        m_fullName(std::move(fullName)),
+        m_description(std::move(description)) {}
+
+template ProgramArgument<bool>::ProgramArgument(std::string fullName, std::string description);
+template ProgramArgument<UART::COMPort>::ProgramArgument(std::string fullName, std::string description);
+template ProgramArgument<UART::BaudRate>::ProgramArgument(std::string fullName, std::string description);
+template ProgramArgument<UART::ParityMode>::ProgramArgument(std::string fullName, std::string description);
+template ProgramArgument<UART::StopBits>::ProgramArgument(std::string fullName, std::string description);
 
 
 template<typename T>
-void ProgramArgument<T>::SetValue(T value)
+void ProgramArgument<T>::SetValue(const T &value)
 {
     ProgramArgument::m_value = value;
 }
 
-template void ProgramArgument<bool>::SetValue(bool value);
-template void ProgramArgument<uint16_t>::SetValue(uint16_t value);
-template void ProgramArgument<uint32_t>::SetValue(uint32_t value);
+template void ProgramArgument<bool>::SetValue(const bool &value);
+template void ProgramArgument<UART::BaudRate>::SetValue(const UART::BaudRate &baudRate);
+template void ProgramArgument<UART::COMPort>::SetValue(const UART::COMPort &comPort);
+template void ProgramArgument<UART::ParityMode>::SetValue(const UART::ParityMode &parityMode);
+template void ProgramArgument<UART::StopBits>::SetValue(const UART::StopBits &stopBits);
 
 
-//Helper functions
+//Argument Tools
 
 template <typename T>
-bool HasArgDuplicates(ProgramArgument<T> arg, std::vector<std::string> &hyphenedArguments)
+bool ArgumentTools::HasArgDuplicates(ProgramArgument<T> arg, std::vector<std::string> &hyphenedArguments)
 {
-    if (!ArgumentExist(arg, hyphenedArguments)) return false;
+    if (!ArgumentTools::ArgumentExist(arg, hyphenedArguments)) return false;
 
-    std::string argShortAliasHyphened = std::move(std::string("-") + arg.GetOneCharAlias());
+    const std::optional<char> &shortAlias = arg.GetOneCharAlias();
+
+    size_t argShortAliasAmount;
+
+    if (!shortAlias.has_value())
+        argShortAliasAmount = 0;
+    else
+    {
+        std::string argShortAliasHyphened = std::move(std::string("-") + shortAlias.value());
+        argShortAliasAmount = std::count(hyphenedArguments.begin(), hyphenedArguments.end(), argShortAliasHyphened);
+        if (argShortAliasAmount > 1) return true;
+    }
+
+
     std::string argFullNameHyphened = std::move(std::string("--") + arg.GetFullName());
 
-    auto argShortAliasAmount = std::count(hyphenedArguments.begin(), hyphenedArguments.end(), argShortAliasHyphened);
     auto argFullNameAmount = std::count(hyphenedArguments.begin(), hyphenedArguments.end(), argFullNameHyphened);
-
-    if (argShortAliasAmount > 1) return true;
     if (argFullNameAmount > 1) return true;
 
     if (argShortAliasAmount == 1 && argFullNameAmount == 1) return true;
@@ -46,19 +72,32 @@ bool HasArgDuplicates(ProgramArgument<T> arg, std::vector<std::string> &hyphened
     return false;
 }
 
-template bool HasArgDuplicates<bool>(ProgramArgument<bool> arg, std::vector<std::string> &hyphenedArguments);
-template bool HasArgDuplicates<uint16_t>(ProgramArgument<uint16_t> arg, std::vector<std::string> &hyphenedArguments);
-template bool HasArgDuplicates<uint32_t>(ProgramArgument<uint32_t> arg, std::vector<std::string> &hyphenedArguments);
+template bool ArgumentTools::HasArgDuplicates<bool>(ProgramArgument<bool> arg, std::vector<std::string> &hyphenedArguments);
+template bool ArgumentTools::HasArgDuplicates<UART::BaudRate>(ProgramArgument<UART::BaudRate> arg, std::vector<std::string> &hyphenedArguments);
+template bool ArgumentTools::HasArgDuplicates<UART::COMPort>(ProgramArgument<UART::COMPort> arg, std::vector<std::string> &hyphenedArguments);
+template bool ArgumentTools::HasArgDuplicates<UART::ParityMode>(ProgramArgument<UART::ParityMode> arg, std::vector<std::string> &hyphenedArguments);
+template bool ArgumentTools::HasArgDuplicates<UART::StopBits>(ProgramArgument<UART::StopBits> arg, std::vector<std::string> &hyphenedArguments);
 
 
 
 template <typename T>
-bool ArgumentExist(ProgramArgument<T> arg, std::vector<std::string> &hyphenedArguments)
+bool ArgumentTools::ArgumentExist(ProgramArgument<T> arg, std::vector<std::string> &hyphenedArguments)
 {
-    std::string argShortAliasHyphened = std::move(std::string("-") + arg.GetOneCharAlias());
+    const std::optional<char> &shortAlias = arg.GetOneCharAlias();
+
+    size_t argShortAliasAmount;
+
+    if (!shortAlias.has_value())
+        argShortAliasAmount = 0;
+    else
+    {
+        std::string argShortAliasHyphened = std::move(std::string("-") + shortAlias.value());
+        argShortAliasAmount = std::count(hyphenedArguments.begin(), hyphenedArguments.end(), argShortAliasHyphened);
+        if (argShortAliasAmount > 1) return true;
+    }
+
     std::string argFullNameHyphened = std::move(std::string("--") + arg.GetFullName());
 
-    auto argShortAliasAmount = std::count(hyphenedArguments.begin(), hyphenedArguments.end(), argShortAliasHyphened);
     auto argFullNameAmount = std::count(hyphenedArguments.begin(), hyphenedArguments.end(), argFullNameHyphened);
 
     if (argShortAliasAmount == 0 && argFullNameAmount == 0)
@@ -67,33 +106,54 @@ bool ArgumentExist(ProgramArgument<T> arg, std::vector<std::string> &hyphenedArg
     return true;
 }
 
-template bool ArgumentExist<bool>(ProgramArgument<bool> arg, std::vector<std::string> &hyphenedArguments);
-template bool ArgumentExist<uint16_t>(ProgramArgument<uint16_t> arg, std::vector<std::string> &hyphenedArguments);
-template bool ArgumentExist<uint32_t>(ProgramArgument<uint32_t> arg, std::vector<std::string> &hyphenedArguments);
+template bool ArgumentTools::ArgumentExist<bool>(ProgramArgument<bool> arg, std::vector<std::string> &hyphenedArguments);
+template bool ArgumentTools::ArgumentExist<UART::BaudRate>(ProgramArgument<UART::BaudRate> arg, std::vector<std::string> &hyphenedArguments);
+template bool ArgumentTools::ArgumentExist<UART::COMPort>(ProgramArgument<UART::COMPort> arg, std::vector<std::string> &hyphenedArguments);
+template bool ArgumentTools::ArgumentExist<UART::ParityMode>(ProgramArgument<UART::ParityMode> arg, std::vector<std::string> &hyphenedArguments);
+template bool ArgumentTools::ArgumentExist<UART::StopBits>(ProgramArgument<UART::StopBits> arg, std::vector<std::string> &hyphenedArguments);
 
 
 template <typename T>
-size_t GetArgumentIndex(ProgramArgument<T> arg, std::vector<std::string> &hyphenedArguments)
+size_t ArgumentTools::GetArgumentIndex(ProgramArgument<T> arg, std::vector<std::string> &hyphenedArguments)
 {
-    using namespace std;
-    std::string argShortAliasHyphened = std::move(std::string("-") + arg.GetOneCharAlias());
+    const std::optional<char> &shortAlias = arg.GetOneCharAlias();
+
+    size_t argShortAliasAmount;
+
+    std::string argShortAliasHyphened;
+
+    if (!shortAlias.has_value())
+        argShortAliasAmount = 0;
+    else
+    {
+        argShortAliasHyphened = std::move(std::string("-") + shortAlias.value());
+        argShortAliasAmount = std::count(hyphenedArguments.begin(), hyphenedArguments.end(), argShortAliasHyphened);
+        if (argShortAliasAmount > 1) return true;
+    }
+
     std::string argFullNameHyphened = std::move(std::string("--") + arg.GetFullName());
 
-    auto argShortAliasAmount = std::count(hyphenedArguments.begin(), hyphenedArguments.end(), argShortAliasHyphened);
     auto argFullNameAmount = std::count(hyphenedArguments.begin(), hyphenedArguments.end(), argFullNameHyphened);
 
-    auto shortVariantFoundIT = std::find(hyphenedArguments.begin(), hyphenedArguments.end(), argShortAliasHyphened);
+    if (shortAlias.has_value())
+    {
+        auto shortVariantFoundIT = std::find(hyphenedArguments.begin(), hyphenedArguments.end(), argShortAliasHyphened);
 
-    if (shortVariantFoundIT != hyphenedArguments.end())
-        return shortVariantFoundIT - hyphenedArguments.begin();
+        if (shortVariantFoundIT != hyphenedArguments.end())
+            return shortVariantFoundIT - hyphenedArguments.begin();
+    }
+
 
     auto longVariantFoundIT = std::find(hyphenedArguments.begin(), hyphenedArguments.end(), argFullNameHyphened);
 
+    // Aka there is no argument
     assert(longVariantFoundIT != hyphenedArguments.end());
 
     return longVariantFoundIT - hyphenedArguments.begin();
 }
 
-template size_t GetArgumentIndex<bool> (ProgramArgument<bool> arg, std::vector<std::string> &hyphenedArguments);
-template size_t GetArgumentIndex<uint16_t> (ProgramArgument<uint16_t> arg, std::vector<std::string> &hyphenedArguments);
-template size_t GetArgumentIndex<uint32_t> (ProgramArgument<uint32_t> arg, std::vector<std::string> &hyphenedArguments);
+template size_t ArgumentTools::GetArgumentIndex<bool> (ProgramArgument<bool> arg, std::vector<std::string> &hyphenedArguments);
+template size_t ArgumentTools::GetArgumentIndex<UART::BaudRate> (ProgramArgument<UART::BaudRate> arg, std::vector<std::string> &hyphenedArguments);
+template size_t ArgumentTools::GetArgumentIndex<UART::COMPort> (ProgramArgument<UART::COMPort> arg, std::vector<std::string> &hyphenedArguments);
+template size_t ArgumentTools::GetArgumentIndex<UART::ParityMode> (ProgramArgument<UART::ParityMode> arg, std::vector<std::string> &hyphenedArguments);
+template size_t ArgumentTools::GetArgumentIndex<UART::ParityMode> (ProgramArgument<UART::ParityMode> arg, std::vector<std::string> &hyphenedArguments);
